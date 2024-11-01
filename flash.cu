@@ -15,12 +15,14 @@ void forward_kernel(const float* Q, const float* K, const float* V, const int N,
 
     // Define SRAM for Q,K,V,S
     extern __shared__ float sram[];
+    // TODO: size of Qi may be different of Kj, Vj
     int tile_size = Bc * d;  // size of Qi, Kj, Vj
     float* Qi = sram;
     float* Kj = &sram[tile_size];
     float* Vj = &sram[tile_size * 2];
     float* S = &sram[tile_size * 3];
 
+    // loop over K,V
     for (int j = 0; j < Tc; j++) {
 
         // Load Kj, Vj to SRAM
@@ -30,6 +32,7 @@ void forward_kernel(const float* Q, const float* K, const float* V, const int N,
         }
         __syncthreads();  // such that the inner loop can use the correct Kj, Vj
 
+        // loop over Q
         for (int i = 0; i < Tr; i++)  {
 
             // Load Qi to SRAM, l and m to registers
@@ -83,7 +86,8 @@ void forward_kernel(const float* Q, const float* K, const float* V, const int N,
 
 torch::Tensor forward(torch::Tensor Q, torch::Tensor K, torch::Tensor V) {
     // TODO: determine Bc, Br dynamically
-    const int Bc = 32; const int Br = 32;
+    const int Bc = 32;   // block size of K，V
+    const int Br = 32;   // block size of Q
 
     const int B = Q.size(0); const int nh = Q.size(1);
     const int N = Q.size(2); const int d = Q.size(3);
@@ -105,7 +109,8 @@ torch::Tensor forward(torch::Tensor Q, torch::Tensor K, torch::Tensor V) {
     printf("Max shared memory: %d, requested shared memory: %d \\n", max_sram_size, sram_size);
 
     dim3 grid_dim(B, nh);  // batch_size x num_heads
-    dim3 block_dim(Bc);  // Bc threads per block
+    // TODO: block_dim two dimension would be better? as tiling gemm did usually
+    dim3 block_dim(Bc);  // per block calculate a tile, per block has Bc threads, each thread get one row of Q
 
     forward_kernel<<<grid_dim, block_dim, sram_size>>>(
         Q.data_ptr<float>(), K.data_ptr<float>(), V.data_ptr<float>(),
