@@ -108,8 +108,10 @@ torch::Tensor forward(torch::Tensor Q, torch::Tensor K, torch::Tensor V) {
     cudaDeviceGetAttribute(&max_sram_size, cudaDevAttrMaxSharedMemoryPerBlock, 0);
     printf("Max shared memory: %d, requested shared memory: %d \\n", max_sram_size, sram_size);
 
+    // TODO: SM utilizaiton is not enough
     dim3 grid_dim(B, nh);  // batch_size x num_heads
-    // TODO: block_dim two dimension would be better? as tiling gemm did usually
+    // TODO: too much work in each block, the parallelism is not enough
+    // TODO: two dimension block_dim would be better? as tiling gemm did usually
     dim3 block_dim(Bc);  // per block calculate a tile, per block has Bc threads, each thread get one row of Q
 
     forward_kernel<<<grid_dim, block_dim, sram_size>>>(
